@@ -1,0 +1,31 @@
+# Based on frontend .gitignore patterns
+
+# Dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# Environment
+.env*
+.env.local
+
+# Logs
+*.log
+
+# Build files
+/dist
+/build
+
+# IDE
+.vscode
+.idea
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+
+# Local development
+*.local

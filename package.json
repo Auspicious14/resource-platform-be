@@ -1,0 +1,39 @@
+{
+  "name": "resource-platform-be",
+  "version": "1.0.0",
+  "description": "Master Software Development Through Projects",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "nodemon server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Auspicious",
+  "repository": "https://github.com/Auspicious14/resource-platform-be.git",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "argon2": "^0.43.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.14.1",
+    "nodemailer": "^7.0.2",
+    "ts-node": "^10.9.2",
+    "validator": "^13.11.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^18.11.15",
+    "@types/nodemailer": "^6.4.17",
+    "@types/validator": "^13.11.0",
+    "typescript": "^5.8.3"
+  }
+}
