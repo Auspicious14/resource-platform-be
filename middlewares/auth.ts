@@ -10,7 +10,8 @@ export const authenticateToken = (
   res: Response,
   next: NextFunction
 ) => {
-  const token = req.headers["authorization"]?.split(" ")[1];
+  const token =
+    req.cookies.token || req.headers["authorization"]?.split(" ")[1];
   if (!token) res.sendStatus(401);
 
   jwt.verify(token as string, process.env.JWT_SECRET!, (err, user) => {
