@@ -43,4 +43,4 @@ appRoute.get("/", (req, res) => {
   res.send("Backend is working!");
 });
 appRoute.use(authRouter);
-appRoute.use("/project", projectRoutes);
+appRoute.use("/projects", projectRoutes);

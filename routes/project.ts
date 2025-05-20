@@ -10,11 +10,12 @@ import { authenticateToken } from "../middlewares/auth";
 
 const router = Router();
 
-router.route("/").post(authenticateToken, createProject).get(getProjects);
+// router.route("/").post(authenticateToken, createProject).get(getProjects);
 
 router
-  .route("/:id")
-  .get(getProjectById)
-  .put(authenticateToken, updateProject)
-  .delete(authenticateToken, deleteProject);
+  .get("/", getProjects)
+  .get("/:id", getProjectById)
+  .post("/create", authenticateToken, createProject)
+  .put("/:id", authenticateToken, updateProject)
+  .delete("/:id", authenticateToken, deleteProject);
 export default router;
