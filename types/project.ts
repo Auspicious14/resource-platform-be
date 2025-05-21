@@ -1,4 +1,5 @@
 export interface IProject {
+  featured?: boolean;
   title: string;
   difficulty: "beginner" | "intermediate" | "advanced";
   description: string;

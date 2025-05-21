@@ -20,6 +20,7 @@ const projectSchema = new Schema<IProjectDocument>(
     description: { type: String, required: true },
     requirements: [{ type: String }],
     resources: [resourceSchema],
+    // featured: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

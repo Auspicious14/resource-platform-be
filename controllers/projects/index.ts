@@ -45,6 +45,16 @@ export const getProjects = async (_: Request, res: Response) => {
   }
 };
 
+export const getFeaturedProjects = async (_: Request, res: Response) => {
+  try {
+    const projects = await Project.find().limit(10);
+    res.json({ success: true, data: projects });
+  } catch (error) {
+    const errors = handleErrors(error);
+    res.status(400).json({ success: false, error: errors });
+  }
+};
+
 export const getProjectById = async (req: Request, res: Response) => {
   try {
     const project = await Project.findById(req.params.id);
