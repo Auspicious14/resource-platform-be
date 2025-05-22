@@ -2,9 +2,14 @@ import { Request, Response } from "express";
 import { Project } from "../../models/project";
 import { handleErrors } from "../../middlewares/errorHandler";
 import userAuth from "../../models/auth";
+import { upLoadFiles } from "../../middlewares/file";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 export const createProject = async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id;
+  const userId: string = (req as any).user?.id;
+  const { coverImage, ...vals } = req.body;
   try {
     if (!userId)
       res.json({
@@ -17,7 +22,13 @@ export const createProject = async (req: Request, res: Response) => {
       res.json({ success: false, message: "Unauthorised" });
 
     const fullName = `${user?.firstName} ${user?.lastName}`;
-    const project = new Project({ ...req.body, author: fullName });
+    const image = await upLoadFiles(coverImage);
+
+    const project = new Project({
+      ...req.body,
+      coverImage: image,
+      author: fullName,
+    });
     await project.save();
 
     res.status(201).json({ success: true, data: project });
