@@ -35,9 +35,23 @@ export const deleteProject = async (req: Request, res: Response) => {
   }
 };
 
-export const getProjects = async (_: Request, res: Response) => {
+export const getProjects = async (req: Request, res: Response) => {
   try {
-    const projects = await Project.find();
+    const { difficulty, title, description, requirements } = req.query;
+    const filter: any = {};
+    if (difficulty) filter.difficulty = difficulty;
+    if (title) filter.title = { $regex: title, $options: "i" };
+    if (description)
+      filter.description = { $regex: description, $options: "i" };
+    if (requirements) {
+      const reqArr = Array.isArray(requirements)
+        ? requirements
+        : String(requirements)
+            .split(",")
+            .map((r) => r.trim());
+      filter.requirements = { $in: reqArr };
+    }
+    const projects = await Project.find(filter);
     res.json({ success: true, data: projects });
   } catch (error) {
     const errors = handleErrors(error);
