@@ -1,4 +1,4 @@
-import { Schema, model, Document } from "mongoose";
+import mongoose, { Schema, model, Document } from "mongoose";
 import { IProject } from "../../types/project";
 
 interface IProjectDocument extends IProject, Document {}
@@ -20,6 +20,8 @@ const projectSchema = new Schema<IProjectDocument>(
     description: { type: String, required: true },
     requirements: [{ type: String }],
     resources: [resourceSchema],
+    author: { type: String, ref: "user" },
+    coverImage: { type: String },
     // featured: { type: Boolean, default: false },
   },
   { timestamps: true }

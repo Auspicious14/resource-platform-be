@@ -1,11 +1,25 @@
 import { Request, Response } from "express";
 import { Project } from "../../models/project";
 import { handleErrors } from "../../middlewares/errorHandler";
+import userAuth from "../../models/auth";
 
 export const createProject = async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
   try {
-    const project = new Project(req.body);
+    if (!userId)
+      res.json({
+        success: false,
+        message: "Unauthenticated. Please Login to continue",
+      });
+
+    const user = await userAuth.findById(userId);
+    if (user?._id.toString() !== userId)
+      res.json({ success: false, message: "Unauthorised" });
+
+    const fullName = `${user?.firstName} ${user?.lastName}`;
+    const project = new Project({ ...req.body, author: fullName });
     await project.save();
+
     res.status(201).json({ success: true, data: project });
   } catch (error) {
     const errors = handleErrors(error);

@@ -9,4 +9,6 @@ export interface IProject {
     url: string;
     title: string;
   }>;
+  author?: string; // Full name of the author
+  coverImage?: string; // URL to the cover image
 }

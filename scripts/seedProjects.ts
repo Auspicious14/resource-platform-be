@@ -222,6 +222,7 @@ import axios from "axios";
 dotenv.config();
 
 const MONGODB_URL = process.env.MONGODB_URL || "";
+const POLLINATIONS_URL = process.env.POLLINATIONS_API_URL || "";
 
 // Path to the frontend data file
 const dataPath = path.resolve(
@@ -345,11 +346,19 @@ async function seed() {
   const raw = fs.readFileSync(dataPath, "utf-8");
   let projects = parseProjectsData(raw);
 
-  // Remove _id field from each project
-  projects = projects.map((p: any) => {
-    const { _id, ...rest } = p;
-    return rest;
-  });
+  projects = await Promise.all(
+    projects.map(async (p: any) => {
+      const { _id, ...rest } = p;
+
+      const prompt = `A beautiful, modern illustration representing the project: ${p.title}`;
+      const coverImage = await generateImage(prompt);
+      return {
+        ...rest,
+        author: p.author || "Abdulganiyu Uthman",
+        coverImage,
+      };
+    })
+  );
 
   for (const project of projects) {
     if (
@@ -437,3 +446,22 @@ function inferRequirements(project: any) {
 
   return Array.from(reqs);
 }
+
+const generateImage = async (prompt: string) => {
+  const params = {
+    model: "flux",
+    height: "1024",
+    width: "1024",
+    seed: 42,
+    nologo: true,
+    enhance: true,
+  };
+
+  const imageUrl = `${POLLINATIONS_URL}${encodeURIComponent(prompt)}?model=${
+    params.model
+  }&width=${params.width}&height=${params.height}&seed=${params.seed}&nologo=${
+    params.nologo
+  }&enhance=${params.enhance}`;
+
+  return imageUrl;
+};
