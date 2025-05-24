@@ -10,7 +10,7 @@ dotenv.config();
 const JWT_SECRET: any = process.env.JWT_SECRET;
 
 export const signUp = async (req: Request, res: Response) => {
-  const { firstName, lastName, email, password } = req.body;
+  const { firstName, lastName, level, email, password } = req.body;
   try {
     const user: any = await userAuth.findOne({ email });
     if (user) res.json({ success: false, message: "Email already registered" });
@@ -20,6 +20,7 @@ export const signUp = async (req: Request, res: Response) => {
       firstName,
       lastName,
       email,
+      level,
       password: hashedPassword,
     });
     res.json({ success: true, message: "success" });
@@ -55,7 +56,7 @@ export const login = async (req: Request, res: Response) => {
         firstName: user?.firstName,
         lastName: user?.lastName,
         email: user?.email,
-        token
+        token,
       },
     });
   } catch (error) {

@@ -61,10 +61,21 @@ export const deleteProject = async (req: Request, res: Response) => {
 };
 
 export const getProjects = async (req: Request, res: Response) => {
+  const userId = (req as any)?.user?.id;
+  const { difficulty, title, description, requirements } = req.query;
   try {
-    const { difficulty, title, description, requirements } = req.query;
+    if (!userId)
+      res.json({
+        success: false,
+        message: "Unauthenticated. Please Login to continue",
+      });
+
+    const user = await userAuth.findById(userId);
+    if (user?._id.toString() !== userId)
+      res.json({ success: false, message: "Unauthorised" });
+
     const filter: any = {};
-    if (difficulty) filter.difficulty = difficulty;
+    if (difficulty) filter.difficulty = difficulty || user?.level;
     if (title) filter.title = { $regex: title, $options: "i" };
     if (description)
       filter.description = { $regex: description, $options: "i" };

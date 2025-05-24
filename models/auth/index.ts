@@ -18,6 +18,7 @@ const auth = new Schema(
       otp: { type: Number },
       otpDate: { type: Number },
     },
+    level: { type: String },
   },
   { timestamps: true }
 );
