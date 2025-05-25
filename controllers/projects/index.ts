@@ -4,6 +4,7 @@ import { handleErrors } from "../../middlewares/errorHandler";
 import userAuth from "../../models/auth";
 import { upLoadFiles } from "../../middlewares/file";
 import dotenv from "dotenv";
+import { checkAuth } from "../../middlewares/auth";
 
 dotenv.config();
 
@@ -61,21 +62,19 @@ export const deleteProject = async (req: Request, res: Response) => {
 };
 
 export const getProjects = async (req: Request, res: Response) => {
-  const userId = (req as any)?.user?.id;
   const { difficulty, title, description, requirements } = req.query;
-  try {
-    if (!userId)
-      res.json({
-        success: false,
-        message: "Unauthenticated. Please Login to continue",
-      });
 
-    const user = await userAuth.findById(userId);
-    if (user?._id.toString() !== userId)
-      res.json({ success: false, message: "Unauthorised" });
+  try {
+    const jwt: any = await checkAuth(req);
+
+    const user = await userAuth.findById(jwt.id);
 
     const filter: any = {};
-    if (difficulty) filter.difficulty = difficulty || user?.level;
+    if (user && user.level) {
+      filter.difficulty = difficulty || user.level;
+    } else {
+      filter.difficulty = difficulty;
+    }
     if (title) filter.title = { $regex: title, $options: "i" };
     if (description)
       filter.description = { $regex: description, $options: "i" };

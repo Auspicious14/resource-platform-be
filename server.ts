@@ -5,7 +5,7 @@ import { appRoute } from "./index";
 
 const app = express();
 dotenv.config();
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 4000;
 const URI: string = process.env.MONGODB_URL || "";
 
 mongoose
