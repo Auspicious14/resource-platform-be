@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 export const appRoute = express();
 import authRouter from "./routes/auth";
 import projectRoutes from "./routes/project";
+import chatRoutes from "./routes/chat";
 
 dotenv.config();
 
@@ -44,3 +45,4 @@ appRoute.get("/", (req, res) => {
 });
 appRoute.use(authRouter);
 appRoute.use("/projects", projectRoutes);
+appRoute.use(chatRoutes);

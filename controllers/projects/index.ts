@@ -86,7 +86,7 @@ export const getProjects = async (req: Request, res: Response) => {
             .map((r) => r.trim());
       filter.requirements = { $in: reqArr };
     }
-    const projects = await Project.find(filter);
+    const projects = await Project.find(filter).sort({ createdAt: 1 });
     res.json({ success: true, data: projects });
   } catch (error) {
     const errors = handleErrors(error);
