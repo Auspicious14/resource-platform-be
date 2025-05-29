@@ -10,7 +10,7 @@ export const aiProvider = async (
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>
 ) => {
   const completion = await client.chat.completions.create({
-    model: "xai/grok-1:free",
+    model: "meta-llama/llama-4-maverick:free",
     messages: messages as Array<{
       role: "system" | "user" | "assistant";
       content: string;
