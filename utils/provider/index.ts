@@ -24,7 +24,7 @@ export const refinePrompt = async (userInput: string) => {
   const systemPrompt = `You are an expert AI career and project advisor. Refine the user's input to be clear, specific, and optimized for accurate responses about tech career guidance or realistic project ideas. Include relevant keywords (e.g., frontend, backend, React, APIs), clarify user goals or skill level if implied, and remove ambiguity. Return a single, concise prompt in plain text (max 100 words), ready for AI processing.`;
 
   const response = await client.chat.completions.create({
-    model: "xai/grok-1:free",
+    model: "meta-llama/llama-4-maverick:free",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userInput },
