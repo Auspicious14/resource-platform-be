@@ -99,12 +99,12 @@ export const chatWithAI = async (req: Request, res: Response) => {
     if (!conversationId) {
       conversationId = uuidv6();
     }
-    const refinedQuestion = await refinePrompt(question);
+   // const refinedQuestion = await refinePrompt(question);
 
     await chatModel.create({
       user: userId,
       chatId: conversationId,
-      content: refinedQuestion,
+      content: question,
       role: "user",
     });
 
