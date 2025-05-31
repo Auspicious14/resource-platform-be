@@ -78,7 +78,6 @@ export const chatWithAI = async (req: Request, res: Response) => {
   const { question, chatId } = req.body;
 
   const userId = (req as any).user?.id;
-
   try {
     if (!userId) {
       return res.json({
@@ -103,7 +102,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
     const refinedQuestion = await refinePrompt(question);
 
     await chatModel.create({
-      userId,
+      user: userId,
       chatId: conversationId,
       content: refinedQuestion,
       role: "user",
@@ -130,7 +129,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
 
     const aiResponse = await aiProvider(messages);
     const assistantMessage = await chatModel.create({
-      userId,
+      user: userId,
       chatId: conversationId,
       content: aiResponse,
       role: "assistant",
@@ -142,6 +141,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
       messages: [history[history.length - 1], assistantMessage],
     });
   } catch (error) {
+    console.log({ error });
     const errors = handleErrors(error);
     res.status(500).json({ success: false, errors });
   }
