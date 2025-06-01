@@ -99,7 +99,7 @@ export const chatWithAI = async (req: Request, res: Response) => {
     if (!conversationId) {
       conversationId = uuidv6();
     }
-   // const refinedQuestion = await refinePrompt(question);
+    // const refinedQuestion = await refinePrompt(question);
 
     await chatModel.create({
       user: userId,
@@ -135,11 +135,25 @@ export const chatWithAI = async (req: Request, res: Response) => {
       role: "assistant",
     });
 
-    res.json({
-      success: true,
-      chatId: conversationId,
-      messages: [history[history.length - 1], assistantMessage],
-    });
+    res.setHeader("Content-Type", "text/plain");
+
+    const words = aiResponse.split(" ");
+    let i = 0;
+
+    const interval = setInterval(() => {
+      if (i >= words.length) {
+        clearInterval(interval);
+        return res.end();
+      }
+      res.write(words[i] + " ");
+      i++;
+    }, 50);
+
+    // res.json({
+    //   success: true,
+    //   chatId: conversationId,
+    //   messages: [history[history.length - 1], assistantMessage],
+    // });
   } catch (error) {
     console.log({ error });
     const errors = handleErrors(error);
