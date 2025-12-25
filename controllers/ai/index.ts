@@ -9,14 +9,22 @@ export const chatWithAI = async (req: Request, res: Response) => {
   try {
     // Fetch project context if projectId is provided
     let projectContext = "";
+    let difficultyMode: string | null = null;
+
     if (projectId) {
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        include: { milestones: true }
+        include: { 
+          milestones: true,
+          userProjects: { where: { userId } }
+        }
       });
       if (project) {
+        difficultyMode = project.userProjects?.[0]?.difficultyModeChosen || "STANDARD";
         projectContext = `The user is working on the project: "${project.title}". 
         Description: ${project.description}.
+        Difficulty Level: ${project.difficultyLevel}.
+        User's chosen mode: ${difficultyMode}.
         Milestones: ${project.milestones.map(m => `${m.milestoneNumber}. ${m.title}`).join(", ")}.`;
       }
     }
@@ -33,9 +41,19 @@ export const chatWithAI = async (req: Request, res: Response) => {
       parts: [{ text: msg.content }]
     }));
 
+    let modeInstruction = "";
+    if (difficultyMode === "GUIDED") {
+      modeInstruction = "The user is in GUIDED mode. Be very helpful, provide detailed explanations, and don't hesitate to give small code snippets if they are stuck.";
+    } else if (difficultyMode === "HARDCORE") {
+      modeInstruction = "The user is in HARDCORE mode. Be very brief, provide only high-level conceptual hints, and never provide code solutions.";
+    } else {
+      modeInstruction = "The user is in STANDARD mode. Provide balanced guidance, focus on concepts, and only provide code as a last resort.";
+    }
+
     const systemPrompt = `You are an AI Guide for a project-based learning platform. 
     Your goal is to help students learn by providing guidance, not just giving away answers.
     ${projectContext}
+    ${modeInstruction}
     Keep your responses concise and educational.`;
 
     const fullPrompt = `${systemPrompt}\n\nUser: ${message}`;
