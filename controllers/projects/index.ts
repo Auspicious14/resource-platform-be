@@ -1,115 +1,287 @@
 import { Request, Response } from "express";
-import { Project } from "../../models/project";
-import { handleErrors } from "../../middlewares/errorHandler";
-import userAuth from "../../models/auth";
+import prisma from "../../prisma/client";
+import { Difficulty, DifficultyMode, ProjectStatus } from "@prisma/client";
 import { upLoadFiles } from "../../middlewares/file";
-import dotenv from "dotenv";
-import { checkAuth } from "../../middlewares/auth";
-
-dotenv.config();
 
 export const createProject = async (req: Request, res: Response) => {
-  const userId: string = (req as any).user?.id;
-  const { coverImage, ...vals } = req.body;
+  const userId = (req as any).user?.id;
+  const { 
+    title, 
+    description, 
+    difficultyLevel, 
+    technologies, 
+    categories, 
+    estimatedTime, 
+    learningObjectives, 
+    resourceLinks, 
+    starterRepoUrl, 
+    difficultyModes,
+    coverImage,
+    milestones
+  } = req.body;
+
   try {
-    if (!userId)
-      res.json({
-        success: false,
-        message: "Unauthenticated. Please Login to continue",
-      });
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    const user = await userAuth.findById(userId);
-    if (user?._id.toString() !== userId)
-      res.json({ success: false, message: "Unauthorised" });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || (user.role !== "ADMIN" && user.role !== "CONTRIBUTOR")) {
+      return res.status(403).json({ success: false, message: "Only Admins or Contributors can create projects" });
+    }
 
-    const fullName = `${user?.firstName} ${user?.lastName}`;
-    const image = await upLoadFiles(coverImage);
+    let imageUrl = coverImage;
+    if (coverImage && !coverImage.startsWith("http")) {
+      imageUrl = await upLoadFiles(coverImage);
+    }
 
-    const project = new Project({
-      ...req.body,
-      coverImage: image,
-      author: fullName,
+    const project = await prisma.project.create({
+      data: {
+        title,
+        description,
+        difficultyLevel: difficultyLevel as Difficulty,
+        technologies,
+        categories,
+        estimatedTime,
+        learningObjectives,
+        resourceLinks: resourceLinks || [],
+        starterRepoUrl,
+        difficultyModes: difficultyModes || ["GUIDED", "STANDARD", "HARDCORE"],
+        createdById: userId,
+        milestones: {
+          create: milestones?.map((m: any, index: number) => ({
+            milestoneNumber: index + 1,
+            title: m.title,
+            description: m.description,
+            hints: m.hints || [],
+            validationCriteria: m.validationCriteria
+          }))
+        }
+      },
+      include: {
+        milestones: true
+      }
     });
-    await project.save();
 
     res.status(201).json({ success: true, data: project });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const updateProject = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req as any).user?.id;
+  const updateData = req.body;
+
   try {
-    const project = await Project.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
+    // Check permissions
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || (user.role !== "ADMIN" && project.createdById !== userId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized to update this project" });
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id },
+      data: updateData,
+      include: { milestones: true }
     });
-    res.json({ success: true, data: project });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
+
+    res.json({ success: true, data: updatedProject });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const deleteProject = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req as any).user?.id;
+
   try {
-    await Project.findByIdAndDelete(req.params.id);
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== "ADMIN") {
+      return res.status(403).json({ success: false, message: "Only Admins can delete projects" });
+    }
+
+    await prisma.project.delete({ where: { id } });
     res.json({ success: true, message: "Project deleted successfully" });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const getProjects = async (req: Request, res: Response) => {
-  const { difficulty, title, description, requirements } = req.query;
+  const { difficulty, tech, category, title } = req.query;
 
   try {
-    const jwt: any = await checkAuth(req);
+    const where: any = {};
+    if (difficulty) where.difficultyLevel = difficulty as Difficulty;
+    if (tech) where.technologies = { has: tech as string };
+    if (category) where.categories = { has: category as string };
+    if (title) where.title = { contains: title as string, mode: "insensitive" };
 
-    const user = await userAuth.findById(jwt.id);
+    const projects = await prisma.project.findMany({
+      where,
+      include: {
+        createdBy: {
+          select: { firstName: true, lastName: true }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
 
-    const filter: any = {};
-    if (user && user.level) {
-      filter.difficulty = difficulty || user.level;
-    } else {
-      filter.difficulty = difficulty;
-    }
-    if (title) filter.title = { $regex: title, $options: "i" };
-    if (description)
-      filter.description = { $regex: description, $options: "i" };
-    if (requirements) {
-      const reqArr = Array.isArray(requirements)
-        ? requirements
-        : String(requirements)
-            .split(",")
-            .map((r) => r.trim());
-      filter.requirements = { $in: reqArr };
-    }
-    const projects = await Project.find(filter).sort({ createdAt: 1 });
     res.json({ success: true, data: projects });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
-  }
-};
-
-export const getFeaturedProjects = async (_: Request, res: Response) => {
-  try {
-    const projects = await Project.find().limit(10);
-    res.json({ success: true, data: projects });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const getProjectById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        milestones: { orderBy: { milestoneNumber: "asc" } },
+        createdBy: { select: { firstName: true, lastName: true } }
+      }
+    });
+
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+
     res.json({ success: true, data: project });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.status(400).json({ success: false, error: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// User Progress Endpoints
+export const startProject = async (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const userId = (req as any).user?.id;
+  const { difficultyModeChosen } = req.body;
+
+  try {
+    const existingProgress = await prisma.userProject.findUnique({
+      where: { userId_projectId: { userId, projectId } }
+    });
+
+    if (existingProgress) {
+      return res.status(400).json({ success: false, message: "Project already started" });
+    }
+
+    const progress = await prisma.userProject.create({
+      data: {
+        userId,
+        projectId,
+        difficultyModeChosen: difficultyModeChosen as DifficultyMode || "STANDARD",
+        status: "IN_PROGRESS"
+      }
+    });
+
+    res.status(201).json({ success: true, data: progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateProgress = async (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const userId = (req as any).user?.id;
+  const { status, repoUrl } = req.body;
+
+  try {
+    const progress = await prisma.userProject.update({
+      where: { userId_projectId: { userId, projectId } },
+      data: { status: status as ProjectStatus, repoUrl }
+    });
+
+    res.json({ success: true, data: progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const completeProject = async (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const userId = (req as any).user?.id;
+  const { repoUrl } = req.body;
+
+  try {
+    const progress = await prisma.userProject.update({
+      where: { userId_projectId: { userId, projectId } },
+      data: { 
+        status: "COMPLETED", 
+        completedAt: new Date(),
+        repoUrl
+      }
+    });
+
+    // Award XP (simple example)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { xp: { increment: 100 } }
+    });
+
+    // Update project completion rate
+    const totalStarted = await prisma.userProject.count({ where: { projectId } });
+    const totalCompleted = await prisma.userProject.count({ where: { projectId, status: "COMPLETED" } });
+    
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { 
+        completionRate: (totalCompleted / totalStarted) * 100,
+        submissionCount: { increment: 1 }
+      }
+    });
+
+    res.json({ success: true, data: progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getUserProgress = async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
+
+  try {
+    const progress = await prisma.userProject.findMany({
+      where: { userId },
+      include: {
+        project: {
+          select: { title: true, difficultyLevel: true }
+        }
+      }
+    });
+
+    res.json({ success: true, data: progress });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Submissions
+export const submitProject = async (req: Request, res: Response) => {
+  const { id: projectId } = req.params;
+  const userId = (req as any).user?.id;
+  const { repoUrl } = req.body;
+
+  try {
+    const submission = await prisma.submission.create({
+      data: {
+        userId,
+        projectId,
+        repoUrl
+      }
+    });
+
+    res.status(201).json({ success: true, data: submission });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -1,11 +1,19 @@
 import dotenv from "dotenv";
-import express, { Request, Response, NextFunction } from "express";
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 export const appRoute = express();
 import authRouter from "./routes/auth";
 import projectRoutes from "./routes/project";
-import chatRoutes from "./routes/chat";
+import userRouter from "./routes/user";
+import aiRouter from "./routes/ai";
+import codeReviewRouter from "./routes/code-review";
+import communityRouter from "./routes/community";
+import teamRouter from "./routes/teams";
+import gamificationRouter from "./routes/gamification";
+import pathRouter from "./routes/paths";
+import analyticsRouter from "./routes/analytics";
+import { errorHandler } from "./middlewares/errorHandler";
 
 dotenv.config();
 
@@ -43,6 +51,15 @@ appRoute.use(cookieParser());
 appRoute.get("/", (req, res) => {
   res.send("Backend is working!");
 });
-appRoute.use(authRouter);
-appRoute.use("/projects", projectRoutes);
-appRoute.use(chatRoutes);
+appRoute.use("/api/auth", authRouter);
+appRoute.use("/api/projects", projectRoutes);
+appRoute.use("/api/user", userRouter);
+appRoute.use("/api/ai", aiRouter);
+appRoute.use("/api/code-review", codeReviewRouter);
+appRoute.use("/api/community", communityRouter);
+appRoute.use("/api/teams", teamRouter);
+appRoute.use("/api/gamification", gamificationRouter);
+appRoute.use("/api/paths", pathRouter);
+appRoute.use("/api/analytics", analyticsRouter);
+
+appRoute.use(errorHandler);

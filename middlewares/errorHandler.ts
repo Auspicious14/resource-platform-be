@@ -1,57 +1,53 @@
-import mongoose from "mongoose";
+import { Request, Response, NextFunction } from "express";
+import { Prisma } from "@prisma/client";
 
-export const handleErrors = (error: any) => {
-  const errors: Record<string, string> = {};
+export const errorHandler = (
+  err: any,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  console.error("Error:", err);
 
-  if (
-    error.code === 11000 &&
-    (error.keyPattern?.email ||
-      (error.keyPattern?.personalInformation &&
-        error.keyPattern.personalInformation.email))
-  ) {
-    errors.message = "Email already registered";
-    return errors;
+  let status = 500;
+  let message = "Something went wrong. Please try again.";
+  let errors: any = undefined;
+
+  // Prisma Error Handling
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    switch (err.code) {
+      case "P2002": // Unique constraint violation
+        status = 409;
+        const target = (err.meta?.target as string[]) || [];
+        message = `${target.join(", ")} already exists.`;
+        break;
+      case "P2025": // Record not found
+        status = 404;
+        message = err.meta?.cause as string || "Record not found.";
+        break;
+      case "P2003": // Foreign key constraint violation
+        status = 400;
+        message = "Foreign key constraint failed.";
+        break;
+      default:
+        status = 400;
+        message = `Database error: ${err.message}`;
+    }
+  } else if (err instanceof Prisma.PrismaClientValidationError) {
+    status = 400;
+    message = "Validation error in database request.";
+  } else if (err.name === "ValidationError") {
+    status = 400;
+    message = err.message;
+  } else if (err.status) {
+    status = err.status;
+    message = err.message;
   }
 
-  if (error.code === 11000 && error.keyPattern?.userId) {
-    errors.message = "User already registered";
-    return errors;
-  }
-
-  if (error.code === 11000) {
-    console.log({ error });
-    errors.message = `${error.keyPattern} already exists`;
-    return errors;
-  }
-
-  if (error instanceof mongoose.Error.ValidationError) {
-    Object.values(error.errors).forEach((err: any) => {
-      if (err?.properties?.path) {
-        errors[err.properties.path] = err.properties.message;
-      }
-    });
-    return errors;
-  }
-
-  if (error.name === "CastError") {
-    errors[error.path] = `Invalid ${error.kind}: ${error.value}`;
-    return errors;
-  }
-
-  if (error.message?.includes("validation failed")) {
-    Object.values(error.errors || {}).forEach((err: any) => {
-      if (err?.properties?.path) {
-        errors[err.properties.path] = err?.properties?.message;
-      }
-    });
-    return errors;
-  }
-
-  if (error.name === "TypeError") {
-    errors.message = error.message;
-    return errors;
-  }
-
-  errors.message = error.message || "Something went wrong. Please try again.";
-  return errors;
+  res.status(status).json({
+    success: false,
+    message,
+    errors,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+  });
 };

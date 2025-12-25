@@ -1,89 +1,143 @@
-import express, { Request, Response, NextFunction } from "express";
-import userAuth from "../../models/auth";
+import { Request, Response } from "express";
+import prisma from "../../prisma/client";
 import * as argon2 from "argon2";
 import { sendEmail } from "../../middlewares/email";
-import { handleErrors } from "../../middlewares/errorHandler";
 import { generateOTP } from "../../middlewares/generateOTP";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import redis from "../../utils/redis";
+import { Difficulty, Role } from "@prisma/client";
+
 dotenv.config();
-const JWT_SECRET: any = process.env.JWT_SECRET;
+const JWT_SECRET: string = process.env.JWT_SECRET || "default_secret";
 
 export const signUp = async (req: Request, res: Response) => {
-  const { firstName, lastName, level, email, password } = req.body;
+  const { firstName, lastName, skillLevel, email, password, role } = req.body;
   try {
-    const user: any = await userAuth.findOne({ email });
-    if (user) res.json({ success: false, message: "Email already registered" });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "Email already registered" });
+    }
 
     const hashedPassword = await argon2.hash(password);
-    await userAuth.create({
-      firstName,
-      lastName,
-      email,
-      level,
-      password: hashedPassword,
+    const user = await prisma.user.create({
+      data: {
+        firstName,
+        lastName,
+        email,
+        skillLevel: (skillLevel as Difficulty) || "BEGINNER",
+        password: hashedPassword,
+        role: (role as Role) || "STUDENT",
+      },
     });
-    res.json({ success: true, message: "success" });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+
+    res.json({ success: true, message: "User registered successfully", data: { id: user.id } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
-    const user: any = await userAuth.findOne({ email });
-    if (!user) res.json({ message: "Invalid Email or Password" });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.password) {
+      return res.status(401).json({ success: false, message: "Invalid Email or Password" });
+    }
 
-    const verifyPassword = await argon2.verify(user?.password, password);
-    if (!verifyPassword) res.json({ message: "Invalid Email or Password" });
+    const verifyPassword = await argon2.verify(user.password, password);
+    if (!verifyPassword) {
+      return res.status(401).json({ success: false, message: "Invalid Email or Password" });
+    }
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, {
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "7d",
     });
+
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     res.json({
-      message: "success",
       success: true,
+      message: "Login successful",
       data: {
-        _id: user?._id,
-        firstName: user?.firstName,
-        lastName: user?.lastName,
-        email: user?.email,
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
         token,
       },
     });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  res.clearCookie("token");
+  res.json({ success: true, message: "Logged out successfully" });
+};
+
+export const me = async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        skillLevel: true,
+        bio: true,
+        portfolioLinks: true,
+        xp: true,
+        streak: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.json({ success: true, data: user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const forgetPassword = async (req: Request, res: Response) => {
   const { email } = req.body;
-  const appName = "CV Builder";
+  const appName = "Resource Platform";
 
   try {
-    const user: any = await userAuth.findOne({ email });
-    if (!user)
-      res.json({ success: false, message: "Account is not registered" });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Account is not registered" });
+    }
+
     const { otp, otpDate } = generateOTP();
-    user.manageOTP.otp = otp;
-    user.manageOTP.otpDate = otpDate;
-    await user.save();
+    // Store OTP in Redis with 1 hour expiry
+    await redis.setex(`otp:${email}`, 3600, otp.toString());
 
     const htmlMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #f0f7ff; padding: 30px; border-radius: 10px;">
           <h1 style="color: #1a237e; margin-bottom: 25px;">${appName}</h1>
           <p style="font-size: 16px; color: #333;">
-            Hello ${user?.lastName},<br><br>
+            Hello ${user.lastName},<br><br>
             We received a request to reset your password for your ${appName} account.
           </p>
           <div style="background: #fff; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center;">
@@ -101,8 +155,8 @@ export const forgetPassword = async (req: Request, res: Response) => {
     `;
 
     const textMessage =
-      `CV Builder Password Reset\n\n` +
-      `Hello ${user?.lastName},\n\n` +
+      `${appName} Password Reset\n\n` +
+      `Hello ${user.lastName},\n\n` +
       `Use this OTP to reset your password: ${otp}\n` +
       `This code expires in 1 hour.`;
 
@@ -117,9 +171,8 @@ export const forgetPassword = async (req: Request, res: Response) => {
       success: true,
       message: `An OTP has been sent to your mail. Check your mail for your verification code`,
     });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -127,90 +180,112 @@ export const verifyOTP = async (req: Request, res: Response) => {
   const { email, otp: userOtp } = req.body;
 
   try {
-    const user: any = await userAuth.findOne({ email });
-    if (!user) res.json({ message: "Account is not registered" });
+    const storedOtp = await redis.get(`otp:${email}`);
+    if (!storedOtp) {
+      return res.status(400).json({ success: false, message: "OTP expired or not found" });
+    }
 
-    const { otp, otpDate } = user.manageOTP;
-    const expiryDate = otpDate + 60 * 60 * 1000;
+    if (storedOtp !== userOtp.toString()) {
+      return res.status(400).json({ success: false, message: "Invalid Verification code!" });
+    }
 
-    if (otp !== userOtp)
-      res.json({ success: false, message: "Invalid Verification code!" });
+    // OTP verified, can remove it now
+    await redis.del(`otp:${email}`);
+    // Optionally set a flag in Redis that OTP was verified for this email to allow password reset
+    await redis.setex(`otp_verified:${email}`, 600, "true");
 
-    if (expiryDate < Date.now())
-      return res.json({
-        success: false,
-        message: "OTP expired",
-      });
-
-    user.manageOTP = {};
-    await user.save();
-
-    res.json({ success: true, message: "Verification successfull" });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+    res.json({ success: true, message: "Verification successful" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 export const resetPassword = async (req: Request, res: Response) => {
   const { email, newPassword } = req.body;
 
   try {
-    const user: any = await userAuth.findOne({ email });
-    const verifyPassword = await argon2.verify(user?.password, newPassword);
+    const isVerified = await redis.get(`otp_verified:${email}`);
+    if (!isVerified) {
+      return res.status(400).json({ success: false, message: "OTP not verified" });
+    }
 
-    if (verifyPassword) res.json({ message: "You entered your old password" });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (user.password) {
+      const verifyPassword = await argon2.verify(user.password, newPassword);
+      if (verifyPassword) {
+        return res.status(400).json({ success: false, message: "You entered your old password" });
+      }
+    }
 
     const newPass = await argon2.hash(newPassword);
-    user.password = newPass;
-    await user.save();
+    await prisma.user.update({
+      where: { email },
+      data: { password: newPass },
+    });
+
+    await redis.del(`otp_verified:${email}`);
 
     res.json({ success: true, message: "Password successfully reset" });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const getUser = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const user: any = await userAuth.findById(id).select("-password");
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        skillLevel: true,
+        bio: true,
+        portfolioLinks: true,
+        xp: true,
+        streak: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
     res.json({ success: true, data: user });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const updateUser = async (req: Request, res: Response) => {
   const { id } = req.params;
-  let { firstName, lastName, email, password } = req.body;
+  let { firstName, lastName, email, password, bio, skillLevel, portfolioLinks, avatarUrl } = req.body;
   try {
-    if (password) password = await argon2.hash(password);
+    const data: any = { firstName, lastName, email, bio, skillLevel, portfolioLinks, avatarUrl };
+    if (password) {
+      data.password = await argon2.hash(password);
+    }
 
-    const user: any = await userAuth.findByIdAndUpdate(
-      id,
-      { $set: { firstName, lastName, email, password } },
-      { new: true }
-    );
-
-    if (!user) res.json({ success: false, message: "No user matched" });
+    const user = await prisma.user.update({
+      where: { id },
+      data,
+    });
 
     res.json({
       success: true,
       data: {
-        user: {
-          _id: user?._id,
-          firstName: user?.firstName,
-          lastName: user?.lastName,
-          email: user?.email,
-          createdAt: user?.createdAt,
-          updatedAt: user?.updatedAt,
-        },
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        skillLevel: user.skillLevel,
       },
     });
-  } catch (error) {
-    const errors = handleErrors(error);
-    res.json({ success: false, message: errors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
