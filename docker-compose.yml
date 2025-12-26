@@ -1,14 +1,15 @@
-version: '3.8'
+version: "3.8"
 
 services:
   api:
     build: .
     ports:
-      - "3000:3000"
+      - "4000:4000"
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/resource_platform?schema=public
       - REDIS_URL=redis://redis:6379
-      - NODE_ENV=production
+      - NODE_ENV=development
+      - PORT=4000
     depends_on:
       - db
       - redis

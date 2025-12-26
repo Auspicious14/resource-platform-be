@@ -175,25 +175,33 @@ export const getProjectById = async (req: Request, res: Response) => {
         .status(404)
         .json({ success: false, message: "Project not found" });
 
-    // If user is authenticated, also fetch their completed milestones for this project
-    let completedMilestones: string[] = [];
-    if (user) {
-      const userMilestones = await prisma.userMilestone.findMany({
-        where: {
-          userId: user.id,
-          milestone: { projectId: id },
-        },
-        select: { milestoneId: true },
-      });
-      completedMilestones = userMilestones.map((m) => m.milestoneId);
+    // If user is authenticated, fetch their progress and completed milestones for each mode
+    let progressByMode: any = {};
+    if (user && project.userProjects) {
+      for (const up of project.userProjects) {
+        const completedMilestones = await prisma.userMilestone.findMany({
+          where: {
+            userId: user.id,
+            userProjectId: up.id,
+          },
+          select: { milestoneId: true },
+        });
+
+        progressByMode[up.difficultyModeChosen] = {
+          status: up.status,
+          completedMilestones: completedMilestones.map((m) => m.milestoneId),
+          userProjectId: up.id,
+        };
+      }
     }
 
     res.json({
       success: true,
       data: {
         ...project,
+        progressByMode,
+        // For backward compatibility
         userProgress: project.userProjects?.[0] || null,
-        completedMilestones,
       },
     });
   } catch (error: any) {
@@ -208,22 +216,30 @@ export const startProject = async (req: Request, res: Response) => {
   const { difficultyModeChosen } = req.body;
 
   try {
+    const mode = (difficultyModeChosen as DifficultyMode) || "STANDARD";
+
     const existingProgress = await prisma.userProject.findUnique({
-      where: { userId_projectId: { userId, projectId } },
+      where: {
+        userId_projectId_difficultyModeChosen: {
+          userId,
+          projectId,
+          difficultyModeChosen: mode,
+        },
+      },
     });
 
     if (existingProgress) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Project already started" });
+      return res.status(400).json({
+        success: false,
+        message: "Project already started in this mode",
+      });
     }
 
     const progress = await prisma.userProject.create({
       data: {
         userId,
         projectId,
-        difficultyModeChosen:
-          (difficultyModeChosen as DifficultyMode) || "STANDARD",
+        difficultyModeChosen: mode,
         status: "IN_PROGRESS",
       },
     });
@@ -237,11 +253,17 @@ export const startProject = async (req: Request, res: Response) => {
 export const updateProgress = async (req: Request, res: Response) => {
   const { id: projectId } = req.params;
   const userId = (req as any).user?.id;
-  const { status, repoUrl } = req.body;
+  const { status, repoUrl, difficultyMode } = req.body;
 
   try {
     const progress = await prisma.userProject.update({
-      where: { userId_projectId: { userId, projectId } },
+      where: {
+        userId_projectId_difficultyModeChosen: {
+          userId,
+          projectId,
+          difficultyModeChosen: difficultyMode as DifficultyMode,
+        },
+      },
       data: { status: status as ProjectStatus, repoUrl },
     });
 
@@ -254,11 +276,17 @@ export const updateProgress = async (req: Request, res: Response) => {
 export const completeProject = async (req: Request, res: Response) => {
   const { id: projectId } = req.params;
   const userId = (req as any).user?.id;
-  const { repoUrl } = req.body;
+  const { repoUrl, difficultyMode } = req.body;
 
   try {
     const progress = await prisma.userProject.update({
-      where: { userId_projectId: { userId, projectId } },
+      where: {
+        userId_projectId_difficultyModeChosen: {
+          userId,
+          projectId,
+          difficultyModeChosen: difficultyMode as DifficultyMode,
+        },
+      },
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
@@ -337,32 +365,52 @@ export const submitProject = async (req: Request, res: Response) => {
 export const completeMilestone = async (req: Request, res: Response) => {
   const { id: projectId, milestoneId } = req.params;
   const userId = (req as any).user?.id;
+  const { difficultyMode } = req.body;
 
   try {
     const userProject = await prisma.userProject.findUnique({
-      where: { userId_projectId: { userId, projectId } },
+      where: {
+        userId_projectId_difficultyModeChosen: {
+          userId,
+          projectId,
+          difficultyModeChosen: difficultyMode as DifficultyMode,
+        },
+      },
     });
 
     if (!userProject) {
       return res
         .status(400)
-        .json({ success: false, message: "Project not started by user" });
+        .json({
+          success: false,
+          message: "Project not started by user in this mode",
+        });
     }
 
     const existingMilestone = await prisma.userMilestone.findUnique({
-      where: { userId_milestoneId: { userId, milestoneId } },
+      where: {
+        userId_milestoneId_userProjectId: {
+          userId,
+          milestoneId,
+          userProjectId: userProject.id,
+        },
+      },
     });
 
     if (existingMilestone) {
       return res
         .status(400)
-        .json({ success: false, message: "Milestone already completed" });
+        .json({
+          success: false,
+          message: "Milestone already completed in this mode",
+        });
     }
 
     const milestone = await prisma.userMilestone.create({
       data: {
         userId,
         milestoneId,
+        userProjectId: userProject.id,
       },
     });
 

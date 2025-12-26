@@ -1,14 +1,44 @@
+import { Difficulty, DifficultyMode, ProjectStatus } from "@prisma/client";
+
 export interface IProject {
-  featured?: boolean;
+  id: string;
   title: string;
-  difficulty: "beginner" | "intermediate" | "advanced";
   description: string;
-  requirements?: string[];
-  resources: Array<{
-    type: "video" | "article" | "course";
-    url: string;
-    title: string;
-  }>;
-  author?: string; // Full name of the author
-  coverImage?: string; // URL to the cover image
+  difficultyLevel: Difficulty;
+  technologies: string[];
+  categories: string[];
+  estimatedTime?: string;
+  learningObjectives: string[];
+  resourceLinks: any[];
+  starterRepoUrl?: string;
+  difficultyModes: DifficultyMode[];
+  submissionCount: number;
+  completionRate: number;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+  milestones?: IProjectMilestone[];
+  progressByMode?: Record<string, any>;
+  userProgress?: any;
+}
+
+export interface IProjectMilestone {
+  id: string;
+  projectId: string;
+  milestoneNumber: number;
+  title: string;
+  description: string;
+  hints: string[];
+  validationCriteria?: string;
+}
+
+export interface IUserProject {
+  id: string;
+  userId: string;
+  projectId: string;
+  status: ProjectStatus;
+  difficultyModeChosen: DifficultyMode;
+  repoUrl?: string;
+  startedAt: Date;
+  completedAt?: Date;
 }

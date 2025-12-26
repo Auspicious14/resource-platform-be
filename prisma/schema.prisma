@@ -109,8 +109,9 @@ model UserProject {
   
   user                User           @relation(fields: [userId], references: [id])
   project             Project        @relation(fields: [projectId], references: [id])
+  milestoneProgress   UserMilestone[]
 
-  @@unique([userId, projectId])
+  @@unique([userId, projectId, difficultyModeChosen])
 }
 
 model ProjectMilestone {
@@ -131,13 +132,15 @@ model ProjectMilestone {
 model UserMilestone {
   id              String           @id @default(uuid())
   userId          String
+  userProjectId   String?          // Made optional for migration, but will be required
   milestoneId     String
   completedAt     DateTime         @default(now())
   
   user            User             @relation(fields: [userId], references: [id])
+  userProject     UserProject?     @relation(fields: [userProjectId], references: [id])
   milestone       ProjectMilestone @relation(fields: [milestoneId], references: [id])
 
-  @@unique([userId, milestoneId])
+  @@unique([userId, milestoneId, userProjectId])
 }
 
 model Submission {
