@@ -11,6 +11,7 @@ import {
   completeProject,
   getUserProgress,
   completeMilestone,
+  getFeaturedProjects,
 } from "../controllers/projects";
 import { authenticateToken } from "../middlewares/auth";
 
@@ -18,6 +19,7 @@ const router = Router();
 
 router.get("/", getProjects);
 router.get("/progress", authenticateToken, getUserProgress);
+router.get("/featured", getFeaturedProjects);
 router.get("/:id", getProjectById);
 router.post("/", authenticateToken, createProject);
 router.put("/:id", authenticateToken, updateProject);

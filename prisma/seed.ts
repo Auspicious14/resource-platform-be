@@ -1,8 +1,6 @@
 import { PrismaClient, Difficulty } from "@prisma/client";
 
-import { withAccelerate } from "@prisma/extension-accelerate";
-
-const prisma = new PrismaClient().$extends(withAccelerate());
+const prisma = new PrismaClient();
 
 const projects = [
   {

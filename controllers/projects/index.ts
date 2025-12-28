@@ -161,14 +161,14 @@ export const getProjectById = async (req: Request, res: Response) => {
 
   try {
     const user = await checkAuth(req);
-    const project = await prisma.project.findUnique({
+    const project = (await prisma.project.findUnique({
       where: { id },
       include: {
         milestones: { orderBy: { milestoneNumber: "asc" } },
         createdBy: { select: { firstName: true, lastName: true } },
         userProjects: user ? { where: { userId: user.id } } : false,
       },
-    });
+    })) as any;
 
     if (!project)
       return res
@@ -379,12 +379,10 @@ export const completeMilestone = async (req: Request, res: Response) => {
     });
 
     if (!userProject) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Project not started by user in this mode",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Project not started by user in this mode",
+      });
     }
 
     const existingMilestone = await prisma.userMilestone.findUnique({
@@ -398,12 +396,10 @@ export const completeMilestone = async (req: Request, res: Response) => {
     });
 
     if (existingMilestone) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Milestone already completed in this mode",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Milestone already completed in this mode",
+      });
     }
 
     const milestone = await prisma.userMilestone.create({
@@ -415,6 +411,24 @@ export const completeMilestone = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ success: true, data: milestone });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getFeaturedProjects = async (req: Request, res: Response) => {
+  try {
+    const featuredProjects = await prisma.project.findMany({
+      take: 4,
+      orderBy: { submissionCount: "desc" },
+      include: {
+        createdBy: {
+          select: { firstName: true, lastName: true },
+        },
+      },
+    });
+
+    res.json({ success: true, data: featuredProjects });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
