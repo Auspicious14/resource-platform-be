@@ -285,8 +285,13 @@ async function main() {
   console.log(`Created user with id: ${user.id}`);
 
   for (const project of projects) {
-    const createdProject = await prisma.project.create({
-      data: {
+    const createdProject = await prisma.project.upsert({
+      where: { slug: project.slug },
+      update: {
+        ...project,
+        createdById: user.id,
+      },
+      create: {
         ...project,
         createdById: user.id,
       },

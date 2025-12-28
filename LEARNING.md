@@ -143,25 +143,33 @@ We use Prisma's `groupBy` and `_count` features to generate user and admin dashb
 
 ---
 
+## 🎯 Next Steps for You
+
+1. **Explore the Schema:** Look at `prisma/schema.prisma` and try adding a new field (like `twitterHandle` to the User model).
+2. **Check the Logs:** Run the server and watch the terminal.
+3. **Test an API:** Use Postman or Insomnia to hit `POST /api/ai/chat` and see how the AI responds based on the project context.
+
+---
+
 ## 🛠 How to Start the Project
 
-Since we are using Docker for the database and cache, follow these steps to get everything running correctly:
+Follow these steps to get everything running correctly:
 
-### 1. Start Infrastructure (DB & Redis)
+### 1. Sync the Database
 
-Run this command to start PostgreSQL and Redis in the background:
-
-```bash
-docker-compose up -d db redis
-```
-
-### 2. Sync the Database
-
-Once the database is running, ensure your Prisma client and database schema are in sync:
+Ensure your Prisma client and database schema are in sync:
 
 ```bash
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev
+```
+
+### 2. Seed the Database (Optional)
+
+If you need initial data:
+
+```bash
+npm run seed
 ```
 
 ### 3. Start the Backend Server
@@ -169,10 +177,8 @@ npx prisma migrate dev --name init
 Now you can start your development server:
 
 ```bash
-yarn dev
+npm run dev
 ```
-
-_(Note: I updated `package.json` to point to `index.ts` as the entry point, which was causing your crash if you didn't have a `server.ts` file)._
 
 ---
 
