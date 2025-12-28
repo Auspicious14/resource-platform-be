@@ -61,16 +61,21 @@ model User {
   votes           Vote[]
   forumThreads    ForumThread[]
   forumPosts      ForumPost[]
+  chatMessages    ChatMessage[]
   
   teams           TeamMember[]
   achievements    UserAchievement[]
   pathProgress    UserPathProgress[]
   milestoneProgress UserMilestone[]
+  
+  @@index([email])
+  @@index([role])
 }
 
 model Project {
   id               String            @id @default(uuid())
   title            String
+  slug             String            @unique
   description      String
   difficultyLevel  Difficulty
   technologies     String[]
@@ -82,20 +87,27 @@ model Project {
   difficultyModes  DifficultyMode[]  @default([GUIDED, STANDARD, HARDCORE])
   submissionCount  Int               @default(0)
   completionRate   Float             @default(0)
+  featured         Boolean           @default(false)
   
   createdById      String
-  createdBy        User              @relation("ProjectCreator", fields: [createdById], references: [id])
+  createdBy        User              @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Cascade)
   
   milestones       ProjectMilestone[]
   userProjects     UserProject[]
   submissions      Submission[]
   forumThreads     ForumThread[]
+  chatMessages     ChatMessage[]
   
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   teams           Team[]
   learningPaths   LearningPathProject[]
+  
+  @@index([difficultyLevel])
+  @@index([featured])
+  @@index([slug])
+  @@index([createdAt])
 }
 
 model UserProject {
@@ -108,11 +120,14 @@ model UserProject {
   startedAt           DateTime       @default(now())
   completedAt         DateTime?
   
-  user                User           @relation(fields: [userId], references: [id])
-  project             Project        @relation(fields: [projectId], references: [id])
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   milestoneProgress   UserMilestone[]
 
   @@unique([userId, projectId, difficultyModeChosen])
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
 }
 
 model ProjectMilestone {
@@ -124,40 +139,53 @@ model ProjectMilestone {
   hints             String[]
   validationCriteria String?
   
-  project           Project  @relation(fields: [projectId], references: [id])
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userProgress      UserMilestone[]
 
   @@unique([projectId, milestoneNumber])
+  @@index([projectId])
 }
 
 model UserMilestone {
   id              String           @id @default(uuid())
   userId          String
-  userProjectId   String?          // Made optional for migration, but will be required
+  userProjectId   String?
   milestoneId     String
   completedAt     DateTime         @default(now())
   
-  user            User             @relation(fields: [userId], references: [id])
-  userProject     UserProject?     @relation(fields: [userProjectId], references: [id])
-  milestone       ProjectMilestone @relation(fields: [milestoneId], references: [id])
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userProject     UserProject?     @relation(fields: [userProjectId], references: [id], onDelete: Cascade)
+  milestone       ProjectMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
   @@unique([userId, milestoneId, userProjectId])
+  @@index([userId])
+  @@index([milestoneId])
 }
 
 model Submission {
-  id          String   @id @default(uuid())
-  userId      String
-  projectId   String
-  repoUrl     String
-  feedback    String?
-  score       Int?
-  isPublic    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  projectId     String
+  repoUrl       String
+  liveUrl       String?
+  description   String?
+  feedback      String?
+  score         Int?
+  upvotes       Int      @default(0)
+  isPublic      Boolean  @default(false)
+  aiReviewData  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
-  user        User     @relation(fields: [userId], references: [id])
-  project     Project  @relation(fields: [projectId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   comments    Comment[]
   votes       Vote[]
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([isPublic])
+  @@index([createdAt])
 }
 
 model Comment {
@@ -165,10 +193,18 @@ model Comment {
   content       String
   userId        String
   submissionId  String
+  parentId      String?
   createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   
-  user          User       @relation(fields: [userId], references: [id])
-  submission    Submission @relation(fields: [submissionId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  parent        Comment?   @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies       Comment[]  @relation("CommentReplies")
+  
+  @@index([submissionId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 model Vote {
@@ -178,10 +214,11 @@ model Vote {
   submissionId  String
   createdAt     DateTime   @default(now())
   
-  user          User       @relation(fields: [userId], references: [id])
-  submission    Submission @relation(fields: [submissionId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, submissionId])
+  @@index([submissionId])
 }
 
 model ForumThread {
@@ -189,13 +226,17 @@ model ForumThread {
   title         String
   content       String
   userId        String
-  projectId     String?    // Optional: project-specific thread
+  projectId     String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   
-  user          User       @relation(fields: [userId], references: [id])
-  project       Project?   @relation(fields: [projectId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project       Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   posts         ForumPost[]
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
 }
 
 model ForumPost {
@@ -206,8 +247,11 @@ model ForumPost {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   
-  user          User       @relation(fields: [userId], references: [id])
-  thread        ForumThread @relation(fields: [threadId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread        ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  
+  @@index([threadId])
+  @@index([userId])
 }
 
 model Team {
@@ -216,8 +260,10 @@ model Team {
   projectId     String
   createdAt     DateTime     @default(now())
   
-  project       Project      @relation(fields: [projectId], references: [id])
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   members       TeamMember[]
+  
+  @@index([projectId])
 }
 
 model TeamMember {
@@ -226,15 +272,17 @@ model TeamMember {
   userId        String
   joinedAt      DateTime @default(now())
   
-  team          Team     @relation(fields: [teamId], references: [id])
-  user          User     @relation(fields: [userId], references: [id])
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
 }
 
 model Achievement {
   id          String   @id @default(uuid())
-  name        String
+  name        String   @unique
   description String
   icon        String?
   xpReward    Int
@@ -250,10 +298,11 @@ model UserAchievement {
   achievementId String
   earnedAt      DateTime    @default(now())
   
-  user          User        @relation(fields: [userId], references: [id])
-  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
+  @@index([userId])
 }
 
 model LearningPath {
@@ -261,6 +310,7 @@ model LearningPath {
   name        String
   description String
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   
   projects    LearningPathProject[]
   userProgress UserPathProgress[]
@@ -273,10 +323,12 @@ model LearningPathProject {
   orderIndex    Int
   prerequisites String[]     @default([])
   
-  path          LearningPath @relation(fields: [pathId], references: [id])
-  project       Project      @relation(fields: [projectId], references: [id])
+  path          LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([pathId, orderIndex])
+  @@index([pathId])
+  @@index([projectId])
 }
 
 model UserPathProgress {
@@ -286,10 +338,12 @@ model UserPathProgress {
   currentProjectIndex Int          @default(0)
   completedAt         DateTime?
   
-  user                User         @relation(fields: [userId], references: [id])
-  path                LearningPath @relation(fields: [pathId], references: [id])
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  path                LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pathId])
+  @@index([userId])
+  @@index([pathId])
 }
 
 model ChatMessage {
@@ -299,4 +353,11 @@ model ChatMessage {
   role        String   // "user" or "assistant"
   content     String
   createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
 }

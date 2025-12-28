@@ -14,18 +14,23 @@ export const chatWithAI = async (req: Request, res: Response) => {
     if (projectId) {
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        include: { 
+        include: {
           milestones: true,
-          userProjects: { where: { userId } }
-        }
+          userProjects: { where: { userId } },
+        },
       });
       if (project) {
-        difficultyMode = project.userProjects?.[0]?.difficultyModeChosen || "STANDARD";
-        projectContext = `The user is working on the project: "${project.title}". 
+        difficultyMode =
+          project.userProjects?.[0]?.difficultyModeChosen || "STANDARD";
+        projectContext = `The user is working on the project: "${
+          project.title
+        }". 
         Description: ${project.description}.
         Difficulty Level: ${project.difficultyLevel}.
         User's chosen mode: ${difficultyMode}.
-        Milestones: ${project.milestones.map(m => `${m.milestoneNumber}. ${m.title}`).join(", ")}.`;
+        Milestones: ${project.milestones
+          .map((m) => `${m.milestoneNumber}. ${m.title}`)
+          .join(", ")}.`;
       }
     }
 
@@ -33,21 +38,24 @@ export const chatWithAI = async (req: Request, res: Response) => {
     const history = await prisma.chatMessage.findMany({
       where: { userId, projectId: projectId || null },
       orderBy: { createdAt: "asc" },
-      take: 20
+      take: 20,
     });
 
-    const geminiHistory = history.map(msg => ({
+    const geminiHistory = history.map((msg) => ({
       role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }]
+      parts: [{ text: msg.content }],
     }));
 
     let modeInstruction = "";
     if (difficultyMode === "GUIDED") {
-      modeInstruction = "The user is in GUIDED mode. Be very helpful, provide detailed explanations, and don't hesitate to give small code snippets if they are stuck.";
+      modeInstruction =
+        "The user is in GUIDED mode. Be very helpful, provide detailed explanations, and don't hesitate to give small code snippets if they are stuck.";
     } else if (difficultyMode === "HARDCORE") {
-      modeInstruction = "The user is in HARDCORE mode. Be very brief, provide only high-level conceptual hints, and never provide code solutions.";
+      modeInstruction =
+        "The user is in HARDCORE mode. Be very brief, provide only high-level conceptual hints, and never provide code solutions.";
     } else {
-      modeInstruction = "The user is in STANDARD mode. Provide balanced guidance, focus on concepts, and only provide code as a last resort.";
+      modeInstruction =
+        "The user is in STANDARD mode. Provide balanced guidance, focus on concepts, and only provide code as a last resort.";
     }
 
     const systemPrompt = `You are an AI Guide for a project-based learning platform. 
@@ -62,12 +70,37 @@ export const chatWithAI = async (req: Request, res: Response) => {
     // Save messages to DB
     await prisma.chatMessage.createMany({
       data: [
-        { userId, projectId: projectId || null, role: "user", content: message },
-        { userId, projectId: projectId || null, role: "assistant", content: aiResponse }
-      ]
+        {
+          userId,
+          projectId: projectId || null,
+          role: "user",
+          content: message,
+        },
+        {
+          userId,
+          projectId: projectId || null,
+          role: "assistant",
+          content: aiResponse,
+        },
+      ],
     });
 
     res.json({ success: true, data: aiResponse });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getAllChatMessages = async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
+
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.json({ success: true, data: messages });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -80,7 +113,7 @@ export const getChatHistory = async (req: Request, res: Response) => {
   try {
     const history = await prisma.chatMessage.findMany({
       where: { userId, projectId: projectId === "null" ? null : projectId },
-      orderBy: { createdAt: "asc" }
+      orderBy: { createdAt: "asc" },
     });
 
     res.json({ success: true, data: history });
@@ -96,12 +129,17 @@ export const requestHint = async (req: Request, res: Response) => {
   try {
     const milestone = await prisma.projectMilestone.findUnique({
       where: { projectId_milestoneNumber: { projectId, milestoneNumber } },
-      include: { project: true }
+      include: { project: true },
     });
 
-    if (!milestone) return res.status(404).json({ success: false, message: "Milestone not found" });
+    if (!milestone)
+      return res
+        .status(404)
+        .json({ success: false, message: "Milestone not found" });
 
-    const prompt = `The user is stuck on Milestone ${milestoneNumber} ("${milestone.title}") of the project "${milestone.project.title}".
+    const prompt = `The user is stuck on Milestone ${milestoneNumber} ("${
+      milestone.title
+    }") of the project "${milestone.project.title}".
     Milestone description: ${milestone.description}.
     Existing hints: ${milestone.hints.join(", ")}.
     Please provide a new, progressive hint that helps them move forward without revealing the full solution.`;
