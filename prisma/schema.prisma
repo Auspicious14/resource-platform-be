@@ -68,6 +68,13 @@ model User {
   pathProgress    UserPathProgress[]
   milestoneProgress UserMilestone[]
   
+  followers       Follow[]         @relation("UserFollowing")
+  following       Follow[]         @relation("UserFollowers")
+  notifications   Notification[]
+  eventParticipations EventParticipant[]
+  eventLeaderboards   EventLeaderboard[]
+  socialShares    SocialShare[]
+  
   @@index([email])
   @@index([role])
 }
@@ -350,7 +357,7 @@ model ChatMessage {
   id          String   @id @default(uuid())
   userId      String
   projectId   String?
-  role        String   // "user" or "assistant"
+  role        String
   content     String
   createdAt   DateTime @default(now())
   
@@ -361,3 +368,119 @@ model ChatMessage {
   @@index([projectId])
   @@index([createdAt])
 }
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+enum NotificationType {
+  FOLLOW
+  ACHIEVEMENT
+  PROJECT_COMPLETE
+  COMMENT
+  UPVOTE
+  TEAM_INVITE
+  EVENT_REMINDER
+  CHALLENGE_START
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  link        String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+}
+
+model Event {
+  id              String      @id @default(uuid())
+  title           String
+  description     String
+  type            String
+  startDate       DateTime
+  endDate         DateTime
+  status          EventStatus @default(UPCOMING)
+  prizePool       String?
+  maxParticipants Int?
+  bannerUrl       String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  participants    EventParticipant[]
+  leaderboard     EventLeaderboard[]
+  
+  @@index([status])
+  @@index([startDate])
+  @@index([type])
+}
+
+model EventParticipant {
+  id          String   @id @default(uuid())
+  eventId     String
+  userId      String
+  joinedAt    DateTime @default(now())
+  
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventLeaderboard {
+  id          String   @id @default(uuid())
+  eventId     String
+  userId      String
+  score       Int      @default(0)
+  rank        Int?
+  updatedAt   DateTime @updatedAt
+  
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([eventId, userId])
+  @@index([eventId, score])
+  @@index([userId])
+}
+
+model SocialShare {
+  id          String   @id @default(uuid())
+  userId      String
+  projectId   String
+  platform    String
+  shareUrl    String
+  ogImageUrl  String?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([projectId])
+}
+

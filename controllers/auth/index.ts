@@ -16,7 +16,9 @@ export const signUp = async (req: Request, res: Response) => {
   try {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ success: false, message: "Email already registered" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already registered" });
     }
 
     const hashedPassword = await argon2.hash(password);
@@ -31,7 +33,11 @@ export const signUp = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ success: true, message: "User registered successfully", data: { id: user.id } });
+    res.json({
+      success: true,
+      message: "User registered successfully",
+      data: { id: user.id },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -42,12 +48,16 @@ export const login = async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.password) {
-      return res.status(401).json({ success: false, message: "Invalid Email or Password" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid Email or Password" });
     }
 
     const verifyPassword = await argon2.verify(user.password, password);
     if (!verifyPassword) {
-      return res.status(401).json({ success: false, message: "Invalid Email or Password" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid Email or Password" });
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
@@ -109,7 +119,9 @@ export const me = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     res.json({ success: true, data: user });
@@ -120,12 +132,14 @@ export const me = async (req: Request, res: Response) => {
 
 export const forgetPassword = async (req: Request, res: Response) => {
   const { email } = req.body;
-  const appName = "Resource Platform";
+  const appName = "Dev Drill";
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res.status(404).json({ success: false, message: "Account is not registered" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Account is not registered" });
     }
 
     const { otp, otpDate } = generateOTP();
@@ -182,11 +196,15 @@ export const verifyOTP = async (req: Request, res: Response) => {
   try {
     const storedOtp = await redis.get(`otp:${email}`);
     if (!storedOtp) {
-      return res.status(400).json({ success: false, message: "OTP expired or not found" });
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP expired or not found" });
     }
 
     if (storedOtp !== userOtp.toString()) {
-      return res.status(400).json({ success: false, message: "Invalid Verification code!" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Verification code!" });
     }
 
     // OTP verified, can remove it now
@@ -206,16 +224,23 @@ export const resetPassword = async (req: Request, res: Response) => {
   try {
     const isVerified = await redis.get(`otp_verified:${email}`);
     if (!isVerified) {
-      return res.status(400).json({ success: false, message: "OTP not verified" });
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP not verified" });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     if (user.password) {
       const verifyPassword = await argon2.verify(user.password, newPassword);
       if (verifyPassword) {
-        return res.status(400).json({ success: false, message: "You entered your old password" });
+        return res
+          .status(400)
+          .json({ success: false, message: "You entered your old password" });
       }
     }
 
@@ -253,7 +278,10 @@ export const getUser = async (req: Request, res: Response) => {
         createdAt: true,
       },
     });
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     res.json({ success: true, data: user });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -262,30 +290,116 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   const { id } = req.params;
-  let { firstName, lastName, email, password, bio, skillLevel, portfolioLinks, avatarUrl } = req.body;
+  let {
+    firstName,
+    lastName,
+    email,
+    password,
+    bio,
+    skillLevel,
+    portfolioLinks,
+    avatarUrl,
+  } = req.body;
   try {
-    const data: any = { firstName, lastName, email, bio, skillLevel, portfolioLinks, avatarUrl };
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const data: any = {
+      firstName,
+      lastName,
+      bio,
+      skillLevel,
+      portfolioLinks,
+      avatarUrl,
+    };
+
+    if (email && email !== user.email) {
+      const existingUser = await prisma.user.findUnique({ where: { email } });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Email already in use" });
+      }
+      data.email = email;
+    }
+
     if (password) {
       data.password = await argon2.hash(password);
     }
 
-    const user = await prisma.user.update({
-      where: { id },
+    const updatedUser = await prisma.user.update({
+      where: { googleId: user.googleId || undefined },
       data,
     });
 
     res.json({
       success: true,
       data: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        skillLevel: user.skillLevel,
+        id: updatedUser.id,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        skillLevel: updatedUser.skillLevel,
       },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const googleAuthCallback = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.redirect(
+        `${process.env.CLIENT_URL}/auth/signin?error=auth_failed`
+      );
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+  } catch (error: any) {
+    res.redirect(`${process.env.CLIENT_URL}/auth/signin?error=server_error`);
+  }
+};
+
+export const githubAuthCallback = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.redirect(
+        `${process.env.CLIENT_URL}/auth/signin?error=auth_failed`
+      );
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+  } catch (error: any) {
+    res.redirect(`${process.env.CLIENT_URL}/auth/signin?error=server_error`);
   }
 };

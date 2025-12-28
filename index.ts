@@ -13,7 +13,11 @@ import teamRouter from "./routes/teams";
 import gamificationRouter from "./routes/gamification";
 import pathRouter from "./routes/paths";
 import analyticsRouter from "./routes/analytics";
+import socialRouter from "./routes/social";
+import notificationsRouter from "./routes/notifications";
+import eventsRouter from "./routes/events";
 import { errorHandler } from "./middlewares/errorHandler";
+import passport from "./utils/passport";
 
 dotenv.config();
 
@@ -47,6 +51,7 @@ console.log("ENV:", process.env.CLIENT_URL);
 appRoute.use(express.json({ limit: "50mb" }));
 appRoute.use(express.urlencoded({ limit: "50mb", extended: true }));
 appRoute.use(cookieParser());
+appRoute.use(passport.initialize());
 
 appRoute.get("/", (req, res) => {
   res.send("Backend is working!");
@@ -61,5 +66,8 @@ appRoute.use("/api/teams", teamRouter);
 appRoute.use("/api/gamification", gamificationRouter);
 appRoute.use("/api/paths", pathRouter);
 appRoute.use("/api/analytics", analyticsRouter);
+appRoute.use("/api/social", socialRouter);
+appRoute.use("/api/notifications", notificationsRouter);
+appRoute.use("/api/events", eventsRouter);
 
 appRoute.use(errorHandler);

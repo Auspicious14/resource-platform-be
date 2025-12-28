@@ -1,15 +1,18 @@
 import express from "express";
 import dotenv from "dotenv";
 import { appRoute } from "./index";
+import { createServer } from "http";
+import { initSocket } from "./utils/socket";
 
-const app = express();
 dotenv.config();
 const port = process.env.PORT || 4000;
 
-app.use(appRoute);
+const httpServer = createServer(appRoute);
+const io = initSocket(httpServer);
 
-app.listen(port, () => {
+httpServer.listen(port, () => {
   console.log(`Server is listening on ${port}`);
 });
 
-export default app;
+export { io };
+export default httpServer;
