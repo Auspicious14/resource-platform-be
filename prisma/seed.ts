@@ -1,4 +1,5 @@
 import { PrismaClient, Difficulty } from "@prisma/client";
+import * as argon2 from "argon2";
 
 const prisma = new PrismaClient();
 
@@ -65,6 +66,18 @@ const projects = [
       { type: "course", url: "#", title: "Node.js Fundamentals" },
     ],
     featured: false,
+    milestones: [
+      {
+        title: "Database Models",
+        description: "Create Mongoose/Prisma models.",
+        hints: {
+          GUIDED: [
+            "Define a schema for Products.",
+            "Include fields for price and stock.",
+          ],
+        },
+      },
+    ],
   },
   {
     title: "Social Media Dashboard",
@@ -83,6 +96,18 @@ const projects = [
       { type: "video", url: "#", title: "GraphQL Subscriptions" },
     ],
     featured: true,
+    milestones: [
+      {
+        title: "WebSocket Server Setup",
+        description: "Configure Socket.io on the backend.",
+        hints: {
+          GUIDED: [
+            "Listen for 'connection' events.",
+            "Use rooms for specific threads.",
+          ],
+        },
+      },
+    ],
   },
   {
     title: "Portfolio Website",
@@ -98,9 +123,18 @@ const projects = [
       "Portfolio best practices",
     ],
     resourceLinks: [
-      { type: "article", url: "#", title: "Next.js Deployment Guide" },
+      { type: "video", url: "#", title: "Portfolio Best Practices" },
     ],
     featured: false,
+    milestones: [
+      {
+        title: "Hero Section",
+        description: "Build a stunning hero section.",
+        hints: {
+          GUIDED: ["Use a high-quality headshot.", "Include a strong CTA."],
+        },
+      },
+    ],
   },
   {
     title: "React Todo App with Firebase",
@@ -269,31 +303,54 @@ const projects = [
 async function main() {
   console.log("Start seeding...");
 
+  const hashedPassword = await argon2.hash("password123");
+
   // Create a default user if not exists
   const user = await prisma.user.upsert({
     where: { email: "admin@devresource.com" },
-    update: {},
+    update: {
+      password: hashedPassword,
+    },
     create: {
       email: "admin@devresource.com",
       firstName: "Admin",
       lastName: "User",
-      password: "password123", // In a real app, this should be hashed
+      password: hashedPassword,
       role: "ADMIN",
     },
   });
 
   console.log(`Created user with id: ${user.id}`);
 
-  for (const project of projects) {
+  for (const projectData of projects) {
+    const { milestones, ...project } = projectData as any;
+
     const createdProject = await prisma.project.upsert({
       where: { slug: project.slug },
       update: {
         ...project,
         createdById: user.id,
+        milestones: {
+          deleteMany: {},
+          create: milestones?.map((m: any, index: number) => ({
+            milestoneNumber: index + 1,
+            title: m.title,
+            description: m.description,
+            hints: m.hints || {},
+          })),
+        },
       },
       create: {
         ...project,
         createdById: user.id,
+        milestones: {
+          create: milestones?.map((m: any, index: number) => ({
+            milestoneNumber: index + 1,
+            title: m.title,
+            description: m.description,
+            hints: m.hints || {},
+          })),
+        },
       },
     });
     console.log(`Created project with id: ${createdProject.id}`);

@@ -64,7 +64,7 @@ export const createProject = async (req: Request, res: Response) => {
             milestoneNumber: index + 1,
             title: m.title,
             description: m.description,
-            hints: m.hints || [],
+            hints: Array.isArray(m.hints) ? { GUIDED: m.hints } : m.hints || {},
             validationCriteria: m.validationCriteria,
           })),
         },

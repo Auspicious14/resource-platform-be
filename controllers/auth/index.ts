@@ -115,6 +115,16 @@ export const me = async (req: Request, res: Response) => {
         role: true,
         avatarUrl: true,
         createdAt: true,
+        projects: {
+          include: {
+            project: true,
+          },
+        },
+        achievements: {
+          include: {
+            achievement: true,
+          },
+        },
       },
     });
 
@@ -276,6 +286,16 @@ export const getUser = async (req: Request, res: Response) => {
         role: true,
         avatarUrl: true,
         createdAt: true,
+        projects: {
+          include: {
+            project: true,
+          },
+        },
+        achievements: {
+          include: {
+            achievement: true,
+          },
+        },
       },
     });
     if (!user)
@@ -290,6 +310,12 @@ export const getUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const authenticatedUserId = (req as any).user?.id;
+
+  if (authenticatedUserId !== id) {
+    return res.status(403).json({ success: false, message: "Forbidden" });
+  }
+
   let {
     firstName,
     lastName,
@@ -332,20 +358,37 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     const updatedUser = await prisma.user.update({
-      where: { googleId: user.googleId || undefined },
+      where: { id },
       data,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        skillLevel: true,
+        bio: true,
+        portfolioLinks: true,
+        xp: true,
+        streak: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+        projects: {
+          include: {
+            project: true,
+          },
+        },
+        achievements: {
+          include: {
+            achievement: true,
+          },
+        },
+      },
     });
 
     res.json({
       success: true,
-      data: {
-        id: updatedUser.id,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        skillLevel: updatedUser.skillLevel,
-      },
+      data: updatedUser,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

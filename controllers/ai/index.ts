@@ -124,7 +124,7 @@ export const getChatHistory = async (req: Request, res: Response) => {
 
 export const requestHint = async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
-  const { projectId, milestoneNumber } = req.body;
+  const { projectId, milestoneNumber, difficultyMode } = req.body;
 
   try {
     const milestone = await prisma.projectMilestone.findUnique({
@@ -137,14 +137,45 @@ export const requestHint = async (req: Request, res: Response) => {
         .status(404)
         .json({ success: false, message: "Milestone not found" });
 
+    let modeInstruction = "";
+    if (difficultyMode === "GUIDED") {
+      modeInstruction =
+        "The user is in GUIDED mode. Be very helpful and detailed.";
+    } else {
+      modeInstruction =
+        "The user is in STANDARD mode. Provide a balanced, conceptual hint.";
+    }
+
+    const modeHintsForPrompt = Array.isArray(milestone.hints)
+      ? milestone.hints
+      : (milestone.hints as any)?.[difficultyMode] || [];
+
     const prompt = `The user is stuck on Milestone ${milestoneNumber} ("${
       milestone.title
     }") of the project "${milestone.project.title}".
     Milestone description: ${milestone.description}.
-    Existing hints: ${milestone.hints.join(", ")}.
-    Please provide a new, progressive hint that helps them move forward without revealing the full solution.`;
+    Difficulty Mode: ${difficultyMode}.
+    ${modeInstruction}
+    Existing hints: ${modeHintsForPrompt.join(", ")}.
+    Please provide a new, progressive hint that helps them move forward without revealing the full solution. 
+    Format the response as a single, clear hint string.`;
 
     const hint = await getGeminiResponse(prompt);
+
+    // Persist the hint by mode in the JSON object
+    const existingHints = (milestone.hints as any) || {};
+    const modeHints = existingHints[difficultyMode] || [];
+    modeHints.push(hint);
+
+    await prisma.projectMilestone.update({
+      where: { id: milestone.id },
+      data: {
+        hints: {
+          ...existingHints,
+          [difficultyMode]: modeHints,
+        },
+      },
+    });
 
     res.json({ success: true, data: hint });
   } catch (error: any) {
