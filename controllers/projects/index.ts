@@ -4,6 +4,13 @@ import { Difficulty, DifficultyMode, ProjectStatus } from "@prisma/client";
 import { upLoadFiles } from "../../middlewares/file";
 import { checkAuth } from "../../middlewares/auth";
 
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export const createProject = async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   const {
@@ -41,6 +48,7 @@ export const createProject = async (req: Request, res: Response) => {
     const project = await prisma.project.create({
       data: {
         title,
+        slug: generateSlug(title),
         description,
         difficultyLevel: difficultyLevel as Difficulty,
         technologies,
@@ -50,7 +58,7 @@ export const createProject = async (req: Request, res: Response) => {
         resourceLinks: resourceLinks || [],
         starterRepoUrl,
         difficultyModes: difficultyModes || ["GUIDED", "STANDARD", "HARDCORE"],
-        createdById: userId,
+        createdBy: { connect: { id: userId } },
         milestones: {
           create: milestones?.map((m: any, index: number) => ({
             milestoneNumber: index + 1,
