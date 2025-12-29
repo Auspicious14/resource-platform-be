@@ -95,6 +95,7 @@ model Project {
   submissionCount  Int               @default(0)
   completionRate   Float             @default(0)
   featured         Boolean           @default(false)
+  coverImage       String?
   
   createdById      String
   createdBy        User              @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Cascade)

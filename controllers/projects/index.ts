@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../../prisma/client";
 import { Difficulty, DifficultyMode, ProjectStatus } from "@prisma/client";
-import { upLoadFiles } from "../../middlewares/file";
+import { upLoadFiles, uploadBuffer } from "../../middlewares/file";
 import { checkAuth } from "../../middlewares/auth";
 
 function generateSlug(title: string): string {
@@ -11,9 +11,20 @@ function generateSlug(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const parseJsonIfNeeded = (value: any) => {
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (e) {
+      return value;
+    }
+  }
+  return value;
+};
+
 export const createProject = async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
-  const {
+  let {
     title,
     description,
     difficultyLevel,
@@ -28,6 +39,14 @@ export const createProject = async (req: Request, res: Response) => {
     milestones,
   } = req.body;
 
+  // Parse JSON fields if they are sent as strings (happens with FormData)
+  technologies = parseJsonIfNeeded(technologies);
+  categories = parseJsonIfNeeded(categories);
+  learningObjectives = parseJsonIfNeeded(learningObjectives);
+  resourceLinks = parseJsonIfNeeded(resourceLinks);
+  difficultyModes = parseJsonIfNeeded(difficultyModes);
+  milestones = parseJsonIfNeeded(milestones);
+
   try {
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -41,7 +60,9 @@ export const createProject = async (req: Request, res: Response) => {
     }
 
     let imageUrl = coverImage;
-    if (coverImage && !coverImage.startsWith("http")) {
+    if (req.file) {
+      imageUrl = await uploadBuffer(req.file.buffer, `${title}-${Date.now()}`);
+    } else if (coverImage && !coverImage.startsWith("http")) {
       imageUrl = await upLoadFiles(coverImage);
     }
 
@@ -51,12 +72,13 @@ export const createProject = async (req: Request, res: Response) => {
         slug: generateSlug(title),
         description,
         difficultyLevel: difficultyLevel as Difficulty,
-        technologies,
-        categories,
+        technologies: technologies || [],
+        categories: categories || [],
         estimatedTime,
-        learningObjectives,
+        learningObjectives: learningObjectives || [],
         resourceLinks: resourceLinks || [],
         starterRepoUrl,
+        coverImage: imageUrl,
         difficultyModes: difficultyModes || ["GUIDED", "STANDARD", "HARDCORE"],
         createdBy: { connect: { id: userId } },
         milestones: {
@@ -83,7 +105,15 @@ export const createProject = async (req: Request, res: Response) => {
 export const updateProject = async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = (req as any).user?.id;
-  const updateData = req.body;
+  let { coverImage, ...updateData } = req.body;
+
+  // Parse JSON fields in updateData if they are sent as strings
+  if (updateData.technologies) updateData.technologies = parseJsonIfNeeded(updateData.technologies);
+  if (updateData.categories) updateData.categories = parseJsonIfNeeded(updateData.categories);
+  if (updateData.learningObjectives) updateData.learningObjectives = parseJsonIfNeeded(updateData.learningObjectives);
+  if (updateData.resourceLinks) updateData.resourceLinks = parseJsonIfNeeded(updateData.resourceLinks);
+  if (updateData.difficultyModes) updateData.difficultyModes = parseJsonIfNeeded(updateData.difficultyModes);
+  if (updateData.milestones) updateData.milestones = parseJsonIfNeeded(updateData.milestones);
 
   try {
     const project = await prisma.project.findUnique({ where: { id } });
@@ -101,9 +131,39 @@ export const updateProject = async (req: Request, res: Response) => {
       });
     }
 
+    let imageUrl = coverImage;
+    if (req.file) {
+      imageUrl = await uploadBuffer(req.file.buffer, `${project.title}-${Date.now()}`);
+    } else if (coverImage && !coverImage.startsWith("http")) {
+      imageUrl = await upLoadFiles(coverImage);
+    }
+
+    // Handle milestones separately if provided
+    if (updateData.milestones) {
+      // For simplicity in this update, we'll delete and recreate milestones if they are provided
+      // In a real app, you might want to sync them more carefully
+      await prisma.projectMilestone.deleteMany({ where: { projectId: id } });
+      
+      const milestones = updateData.milestones;
+      delete updateData.milestones;
+      
+      updateData.milestones = {
+        create: milestones.map((m: any, index: number) => ({
+          milestoneNumber: index + 1,
+          title: m.title,
+          description: m.description,
+          hints: Array.isArray(m.hints) ? { GUIDED: m.hints } : m.hints || {},
+          validationCriteria: m.validationCriteria,
+        })),
+      };
+    }
+
     const updatedProject = await prisma.project.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...updateData,
+        coverImage: imageUrl,
+      },
       include: { milestones: true },
     });
 
@@ -243,7 +303,7 @@ export const startProject = async (req: Request, res: Response) => {
       });
     }
 
-    const progress = await prisma.userProject.create({
+    const userProject = await prisma.userProject.create({
       data: {
         userId,
         projectId,
@@ -252,119 +312,7 @@ export const startProject = async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json({ success: true, data: progress });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const updateProgress = async (req: Request, res: Response) => {
-  const { id: projectId } = req.params;
-  const userId = (req as any).user?.id;
-  const { status, repoUrl, difficultyMode } = req.body;
-
-  try {
-    const progress = await prisma.userProject.update({
-      where: {
-        userId_projectId_difficultyModeChosen: {
-          userId,
-          projectId,
-          difficultyModeChosen: difficultyMode as DifficultyMode,
-        },
-      },
-      data: { status: status as ProjectStatus, repoUrl },
-    });
-
-    res.json({ success: true, data: progress });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const completeProject = async (req: Request, res: Response) => {
-  const { id: projectId } = req.params;
-  const userId = (req as any).user?.id;
-  const { repoUrl, difficultyMode } = req.body;
-
-  try {
-    const progress = await prisma.userProject.update({
-      where: {
-        userId_projectId_difficultyModeChosen: {
-          userId,
-          projectId,
-          difficultyModeChosen: difficultyMode as DifficultyMode,
-        },
-      },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-        repoUrl,
-      },
-    });
-
-    // Award XP (simple example)
-    await prisma.user.update({
-      where: { id: userId },
-      data: { xp: { increment: 100 } },
-    });
-
-    // Update project completion rate
-    const totalStarted = await prisma.userProject.count({
-      where: { projectId },
-    });
-    const totalCompleted = await prisma.userProject.count({
-      where: { projectId, status: "COMPLETED" },
-    });
-
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        completionRate: (totalCompleted / totalStarted) * 100,
-        submissionCount: { increment: 1 },
-      },
-    });
-
-    res.json({ success: true, data: progress });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const getUserProgress = async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id;
-
-  try {
-    const progress = await prisma.userProject.findMany({
-      where: { userId },
-      include: {
-        project: {
-          select: { title: true, difficultyLevel: true },
-        },
-      },
-    });
-
-    res.json({ success: true, data: progress });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Submissions
-export const submitProject = async (req: Request, res: Response) => {
-  const { id: projectId } = req.params;
-  const userId = (req as any).user?.id;
-  const { repoUrl } = req.body;
-
-  try {
-    const submission = await prisma.submission.create({
-      data: {
-        userId,
-        projectId,
-        repoUrl,
-      },
-    });
-
-    res.status(201).json({ success: true, data: submission });
+    res.status(201).json({ success: true, data: userProject });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -381,62 +329,42 @@ export const completeMilestone = async (req: Request, res: Response) => {
         userId_projectId_difficultyModeChosen: {
           userId,
           projectId,
-          difficultyModeChosen: difficultyMode as DifficultyMode,
+          difficultyModeChosen: difficultyMode,
         },
       },
     });
 
     if (!userProject) {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: "Project not started by user in this mode",
+        message: "Project progress not found",
       });
     }
 
-    const existingMilestone = await prisma.userMilestone.findUnique({
-      where: {
-        userId_milestoneId_userProjectId: {
-          userId,
-          milestoneId,
-          userProjectId: userProject.id,
-        },
-      },
-    });
-
-    if (existingMilestone) {
-      return res.status(400).json({
-        success: false,
-        message: "Milestone already completed in this mode",
-      });
-    }
-
-    const milestone = await prisma.userMilestone.create({
+    const completedMilestone = await prisma.userMilestone.create({
       data: {
         userId,
-        milestoneId,
         userProjectId: userProject.id,
+        milestoneId,
       },
     });
 
-    res.status(201).json({ success: true, data: milestone });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const getFeaturedProjects = async (req: Request, res: Response) => {
-  try {
-    const featuredProjects = await prisma.project.findMany({
-      take: 4,
-      orderBy: { submissionCount: "desc" },
-      include: {
-        createdBy: {
-          select: { firstName: true, lastName: true },
-        },
-      },
+    // Check if all milestones are completed
+    const totalMilestones = await prisma.projectMilestone.count({
+      where: { projectId },
+    });
+    const completedCount = await prisma.userMilestone.count({
+      where: { userProjectId: userProject.id },
     });
 
-    res.json({ success: true, data: featuredProjects });
+    if (completedCount === totalMilestones) {
+      await prisma.userProject.update({
+        where: { id: userProject.id },
+        data: { status: "COMPLETED" },
+      });
+    }
+
+    res.json({ success: true, data: completedMilestone });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
