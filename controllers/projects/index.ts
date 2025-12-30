@@ -468,8 +468,20 @@ export const getUserProgress = async (req: Request, res: Response) => {
       where: { userId },
       include: {
         project: {
-          select: { title: true, difficultyLevel: true },
+          include: {
+            milestones: {
+              select: { id: true }, // Needed for progress calculation
+            },
+            // progressByMode: {},
+          },
         },
+        // Include completed milestones to get accurate progress counts
+        milestoneProgress: {
+          select: { milestoneId: true, milestone: true },
+        },
+        // progressByMode: {
+
+        // },
       },
     });
 
@@ -540,6 +552,7 @@ export const completeMilestone = async (req: Request, res: Response) => {
       });
     }
 
+    // 1. Create the milestone completion record
     const milestone = await prisma.userMilestone.create({
       data: {
         userId,
@@ -547,6 +560,34 @@ export const completeMilestone = async (req: Request, res: Response) => {
         userProjectId: userProject.id,
       },
     });
+
+    // 2. CHECK FOR PROJECT COMPLETION
+    const totalMilestones = await prisma.projectMilestone.count({
+      where: { projectId },
+    });
+
+    const completedCount = await prisma.userMilestone.count({
+      where: {
+        userId,
+        userProjectId: userProject.id,
+      },
+    });
+
+    // 3. AUTO-COMPLETE PROJECT if all milestones are done
+    if (completedCount === totalMilestones) {
+      await prisma.userProject.update({
+        where: { id: userProject.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+        },
+      });
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { xp: { increment: 50 } },
+      });
+    }
 
     res.status(201).json({ success: true, data: milestone });
   } catch (error: any) {
