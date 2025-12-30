@@ -12,6 +12,7 @@ import {
   getUserProgress,
   completeMilestone,
   getFeaturedProjects,
+  submitCode,
 } from "../controllers/projects";
 import { authenticateToken } from "../middlewares/auth";
 import { upload } from "../middlewares/file";
@@ -23,7 +24,12 @@ router.get("/progress", authenticateToken, getUserProgress);
 router.get("/featured", getFeaturedProjects);
 router.get("/:id", getProjectById);
 router.post("/", authenticateToken, upload.single("coverImage"), createProject);
-router.put("/:id", authenticateToken, upload.single("coverImage"), updateProject);
+router.put(
+  "/:id",
+  authenticateToken,
+  upload.single("coverImage"),
+  updateProject
+);
 router.delete("/:id", authenticateToken, deleteProject);
 
 // User Progress
@@ -40,5 +46,6 @@ router.post(
 
 // Submissions
 router.post("/:id/submit", authenticateToken, submitProject);
+router.post("/:id/code/submit", authenticateToken, submitCode);
 
 export default router;

@@ -7,10 +7,10 @@ export const chatWithAI = async (req: Request, res: Response) => {
   const { message, projectId } = req.body;
 
   try {
-    // Fetch project context if projectId is provided
     let projectContext = "";
     let difficultyMode: string | null = null;
 
+    // 1. Fetch project context if projectId is provided
     if (projectId) {
       const project = await prisma.project.findUnique({
         where: { id: projectId },
@@ -19,33 +19,32 @@ export const chatWithAI = async (req: Request, res: Response) => {
           userProjects: { where: { userId } },
         },
       });
+
       if (project) {
         difficultyMode =
           project.userProjects?.[0]?.difficultyModeChosen || "STANDARD";
-        projectContext = `The user is working on the project: "${
-          project.title
-        }". 
-        Description: ${project.description}.
-        Difficulty Level: ${project.difficultyLevel}.
-        User's chosen mode: ${difficultyMode}.
-        Milestones: ${project.milestones
-          .map((m) => `${m.milestoneNumber}. ${m.title}`)
-          .join(", ")}.`;
+        projectContext = `
+You are helping a student with the following project:
+Project Title: ${project.title}
+Description: ${project.description}
+Difficulty Level: ${project.difficultyLevel}
+Technologies: ${project.technologies.join(", ")}
+Estimated Time: ${project.estimatedTime}
+Chosen Difficulty Mode: ${difficultyMode}
+
+Milestones:
+${project.milestones
+  .sort((a, b) => a.milestoneNumber - b.milestoneNumber)
+  .map((m) => `${m.milestoneNumber}. ${m.title}: ${m.description}`)
+  .join("\n")}
+
+Learning Objectives:
+${project.learningObjectives.map((obj, i) => `${i + 1}. ${obj}`).join("\n")}
+`;
       }
     }
 
-    // Fetch chat history from DB
-    const history = await prisma.chatMessage.findMany({
-      where: { userId, projectId: projectId || null },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-    });
-
-    const geminiHistory = history.map((msg) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }));
-
+    // 2. Define mode-specific instructions
     let modeInstruction = "";
     if (difficultyMode === "GUIDED") {
       modeInstruction =
@@ -58,16 +57,32 @@ export const chatWithAI = async (req: Request, res: Response) => {
         "The user is in STANDARD mode. Provide balanced guidance, focus on concepts, and only provide code as a last resort.";
     }
 
+    // 3. Build System Prompt
     const systemPrompt = `You are an AI Guide for a project-based learning platform. 
-    Your goal is to help students learn by providing guidance, not just giving away answers.
-    ${projectContext}
-    ${modeInstruction}
-    Keep your responses concise and educational.`;
+Your goal is to help students learn by providing guidance, not just giving away answers.
+${projectContext}
+${modeInstruction}
+Keep your responses concise and educational. Always respond in markdown format.`;
 
-    const fullPrompt = `${systemPrompt}\n\nUser: ${message}`;
-    const aiResponse = await getGeminiResponse(fullPrompt, geminiHistory);
+    // 4. Fetch chat history
+    const history = await prisma.chatMessage.findMany({
+      where: { userId, projectId: projectId || null },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
 
-    // Save messages to DB
+    const geminiHistory = history.map((msg) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+    // 5. Get AI Response
+    const aiResponse = await getGeminiResponse(
+      `${systemPrompt}\n\nUser Question: ${message}`,
+      geminiHistory
+    );
+
+    // 6. Persist Conversation
     await prisma.chatMessage.createMany({
       data: [
         {
@@ -85,9 +100,26 @@ export const chatWithAI = async (req: Request, res: Response) => {
       ],
     });
 
-    res.json({ success: true, data: aiResponse });
+    // 7. Stream response (simulated streaming)
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const words = aiResponse.split(" ");
+    for (let i = 0; i < words.length; i++) {
+      res.write(words[i] + " ");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    res.end();
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Chat error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: error.message });
+    } else {
+      res.end();
+    }
   }
 };
 
@@ -101,22 +133,6 @@ export const getAllChatMessages = async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, data: messages });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-export const getChatHistory = async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id;
-  const { projectId } = req.params;
-
-  try {
-    const history = await prisma.chatMessage.findMany({
-      where: { userId, projectId: projectId === "null" ? null : projectId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    res.json({ success: true, data: history });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -178,6 +194,25 @@ export const requestHint = async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, data: hint });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getChatHistory = async (req: Request, res: Response) => {
+  const { projectId } = req.params;
+  const userId = (req as any).user?.id;
+
+  try {
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        userId,
+        projectId: projectId || null,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.json({ success: true, data: messages });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
