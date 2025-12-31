@@ -73,3 +73,5 @@ appRoute.use("/api/notifications", notificationsRouter);
 appRoute.use("/api/events", eventsRouter);
 
 appRoute.use(errorHandler);
+
+export default appRoute;

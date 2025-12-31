@@ -470,18 +470,17 @@ export const getUserProgress = async (req: Request, res: Response) => {
         project: {
           include: {
             milestones: {
-              select: { id: true }, // Needed for progress calculation
+              orderBy: { milestoneNumber: "asc" },
             },
-            // progressByMode: {},
+            createdBy: {
+              select: { firstName: true, lastName: true, avatarUrl: true },
+            },
           },
         },
-        // Include completed milestones to get accurate progress counts
+        // Correct relation name from schema.prisma
         milestoneProgress: {
-          select: { milestoneId: true, milestone: true },
+          select: { milestoneId: true, completedAt: true },
         },
-        // progressByMode: {
-
-        // },
       },
     });
 
