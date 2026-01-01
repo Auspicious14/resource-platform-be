@@ -1,28 +1,36 @@
-# Use Node.js LTS
-FROM node:18-slim
+# 1. Use Node 22 for @prisma/extension-accelerate compatibility
+FROM node:22-slim
 
-# Install OpenSSL for Prisma
+# Install OpenSSL and other dependencies for Prisma
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first for better caching
 COPY package*.json ./
-COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm install
+# Install dependencies without running scripts
+RUN npm install --ignore-scripts
 
-# Copy source code
+# Copy the rest of the application
 COPY . .
 
-# Generate Prisma client and build
+# Remove the prisma config file if it exists to avoid path confusion
+RUN rm -f prisma.config.ts prisma.config.ts.bak
+
+# Provide a dummy DATABASE_URL for the generation step
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
+# Manually generate Prisma client
+# Without prisma.config.ts, it will default to prisma/schema.prisma
+RUN npx prisma generate
+
+# Build the TypeScript code
 RUN npm run build
 
 # Hugging Face Spaces defaults to port 7860
-# We will set the environment variable to ensure the app uses it
 ENV PORT=7860
 EXPOSE 7860
 
-# Start the server
+# Start the server using the compiled code
 CMD ["npm", "start"]
