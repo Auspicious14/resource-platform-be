@@ -399,9 +399,7 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
   try {
     const user = req.user as any;
     if (!user) {
-      return res.redirect(
-        `${process.env.CLIENT_URL}/auth/signin?error=auth_failed`
-      );
+      return res.redirect(`${process.env.CLIENT_URL}/signin?error=auth_failed`);
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
@@ -415,9 +413,9 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+    res.redirect(`${process.env.CLIENT_URL}/dashboard?token=${token}`);
   } catch (error: any) {
-    res.redirect(`${process.env.CLIENT_URL}/auth/signin?error=server_error`);
+    res.redirect(`${process.env.CLIENT_URL}/signin?error=server_error`);
   }
 };
 
@@ -425,9 +423,7 @@ export const githubAuthCallback = async (req: Request, res: Response) => {
   try {
     const user = req.user as any;
     if (!user) {
-      return res.redirect(
-        `${process.env.CLIENT_URL}/auth/signin?error=auth_failed`
-      );
+      return res.redirect(`${process.env.CLIENT_URL}/signin?error=auth_failed`);
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
@@ -441,8 +437,8 @@ export const githubAuthCallback = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.redirect(`${process.env.CLIENT_URL}/dashboard`);
+    res.redirect(`${process.env.CLIENT_URL}/dashboard?token=${token}`);
   } catch (error: any) {
-    res.redirect(`${process.env.CLIENT_URL}/auth/signin?error=server_error`);
+    res.redirect(`${process.env.CLIENT_URL}/signin?error=server_error`);
   }
 };
